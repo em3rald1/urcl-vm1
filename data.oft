@@ -1,0 +1,3 @@
+.KernelEntry: @org 3
+.printf: @org 41
+.__pr: @org 50

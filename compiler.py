@@ -266,6 +266,12 @@ def _format_labels_(data):
                 labels[ct[1:]] = i-3
     return labels
 
+def generateOffsetTable(labels = {}):
+    data = ""
+    for label in labels:
+        data += f"{label}: @org {labels[label]}\n"
+    return data
+
 def htd(d=''):
     if d.startswith('0x'):
         return int(d[2:], 16)
@@ -280,6 +286,9 @@ class Compiler16:
         self.tokens = split(code)
         self.cci = -1
         self.cti = 4
+        self.bits = 0
+        self.regs = 0
+        self.ram = 0
         self.output = [0]*(2**16)
         self.labels = {}
     def f(self):
@@ -298,8 +307,28 @@ class Compiler16:
                 nd.append(dat)
         self.output = nd
         return nd
-    def include(self, filee):
-        data = open(filee, 'r')
+    def include(self, binary='', filee=""):
+        self.INCLUDE_OFFSET = 0
+        data = open(filee, 'r').read()
+        lines = data.splitlines()
+        place_line = lines[0]
+        fwords = place_line.split()
+        if fwords[0] == '@place':
+            self.INCLUDE_OFFSET = int(fwords[1])
+        
+        for line in lines[1:]:
+            words = line.split(":")
+            label = words[0].strip()
+            data  = words[1].strip()
+            ldata = data.split()[1]
+            self.labels[label] = int(ldata)
+            print(self.labels)
+        bdata = open(binary, 'rb').read()
+        for ff in range(len(bdata)):
+            #$print(bdata[ff]) if bdata[ff] else None
+            self.output[ff+self.INCLUDE_OFFSET] = bdata[ff]
+        print(bdata[190:300])
+        print(self.labels)
     def c(self):
         ct = self.f()
         #print(ct)
@@ -319,6 +348,7 @@ class Compiler16:
                     bits = self.f()
                     if isnum(bits):
                         self.output[0] = htd(bits)
+                        self.bits = htd(bits)
             elif ct == 'OUT':
                 addr = self.f()
                 if isnum(addr):
@@ -349,6 +379,7 @@ class Compiler16:
                     regs = self.f()
                     if isnum(regs):
                         self.output[1] = htd(regs)
+                        self.regs = htd(regs)
             elif ct == 'MINRAM':
                 eqs = self.f()
                 if eqs == '>=' or eqs == '==' or eqs == '<=':
@@ -357,6 +388,12 @@ class Compiler16:
                         #print((int(ram) >> 8) & 0xff)
                         self.output[2] = ((htd(ram) >> 8) & 0xff)
                         self.output[3] = (htd(ram) & 0xff)
+                        self.ram = htd(ram)
+            elif ct == 'INCLUDE':
+                binFile = self.f()
+                oftFile = self.f()
+                if binFile.startswith("\"") and binFile.endswith('"') and oftFile.startswith("\"") and oftFile.endswith('"'):
+                    self.include(binFile[1:-1], oftFile[1:-1])
             elif islabel(ct):
                 self.push(f'r{ct}')
             elif ct == 'RSH':
@@ -402,7 +439,8 @@ class Compiler16:
                     self.push(src)
                 elif isnum(src):
                     self.push(IS['pushl'])
-                    self.push(htd(src))
+                    self.push((htd(src) >> 8) & 0xff)
+                    self.push(htd(src) & 0xff)
                 elif isreg(src):
                     self.push(IS['pushr'])
                     self.push(htd(src[1:])-1)
@@ -410,7 +448,7 @@ class Compiler16:
                 dest = self.f()
                 if isreg(dest):
                     self.push(IS['pop'])
-                    self.push(htd(dest[1:])-1)
+                    self.push(int(dest[1:])-1)
             elif ct == 'BRA':
                 dest = self.f()
                 if islabel(dest):
@@ -639,8 +677,13 @@ class Compiler16:
             try:
                 ct = self.f()
             except IndexError:
-                self.labels = _format_labels_(self.output)
-                return self.pc(), self.labels
+                print(self.labels)
+                self.labels.update(_format_labels_(self.output))
+                self.output[0] = self.bits
+                self.output[1] = self.regs
+                self.output[2] = ((self.ram >> 8) & 0xff)
+                self.output[3] = self.ram & 0xff
+                return self.pc(), self.labels, generateOffsetTable(self.labels)
 
 if sys.argv[3] == '8':
     co = Compiler8(open(sys.argv[1], 'r').read())
@@ -649,9 +692,10 @@ if sys.argv[3] == '8':
     open(sys.argv[2], 'wb').write(bytearray(d))
 elif sys.argv[3] == '16':
     co = Compiler16(open(sys.argv[1], 'r').read())
-    d, labs = co.c()
+    d, labs, oft = co.c()
     #print(labs)
     open(sys.argv[2], 'wb').write(bytearray(d))
+    open(sys.argv[4], 'w').write(oft)
 
 
 #print(split(open(sys.argv[1], 'r').read()))

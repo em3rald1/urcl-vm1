@@ -1115,7 +1115,7 @@ export class URCL16
         let i = false;
         while (!i) {
             i = this.execute();
-            //console.log(`[ REGISTER DATA: [ ${this.regs} ] ]`)
+            console.log(`[ REGISTER DATA: [ ${this.regs} ] ]`)
             if(i) break;
         }
         //console.log(`[PROGRAM TERMINATED WITH CODE ${this.regs[0]}]`)
