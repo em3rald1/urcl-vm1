@@ -1,13 +1,26 @@
 BITS >= 16
 MINREGS >= 11
-MINRAM <= 1024
-
-// data
-
-CALL .fl
+MINRAM <= 10000
+INCLUDE
+BRA .KernelEntry
+.GOT
+DW .printBeans
+.KernelEntry
+CALL .printBeans
 HLT
 
-@org 50
-.fl
-DW .fl
-RET
+@org 900
+.printBeans
+STORE 400 66
+INT 10
+STORE 400 101
+INT 10
+STORE 400 97
+INT 10
+STORE 400 110
+INT 10
+STORE 400 115
+INT 10
+STORE 400 33
+INT 10
+BRA .newline

@@ -5,6 +5,16 @@
 
 type int = number;
 
+import { readLines } from "https://deno.land/std@0.76.0/io/bufio.ts";
+
+async function promptString() {
+    //console.log(question);
+
+    for await (const line of readLines(Deno.stdin)) {
+        return line;
+    }
+}
+
 const IS = {
     'addrr': 1, // a + b
     'addrl': 2, //  a + 5
@@ -78,6 +88,8 @@ const IS = {
     'pushl': 68,
     'pushr': 69,
     'pop': 70,
+    'out': 0xfe,
+    'int': 0xfd,
 };
 
 export class URCL8
@@ -128,6 +140,7 @@ export class URCL8
                 console.log(`[Exec] [Instruction: ${instruction}(ADD), Zero Flag: ${this.zf ? 1 : 0}, Carry Flag ${this.cf ? 1 : 0}]`)
                 break;
             }
+            
             case IS.addll: {
                 let dest = this.fetch();
                 let l1 = this.fetch();
@@ -651,7 +664,7 @@ export class URCL16
     fetch16() : int {
         let d1 = this.fetch();
         let d2 = this.fetch();
-        console.log((d1  << 8) | d2);
+        //console.log((d1  << 8) | d2);
         //this.fetch();
         return (d1 << 8) | d2;
     }
@@ -659,6 +672,11 @@ export class URCL16
         let res = false;
         let instruction = this.fetch();
         switch(instruction) {
+            case IS.out: {
+                let src = this.fetch16();
+                Deno.stdout.write(new Uint8Array([this.memory[src]]));
+                break;
+            }
             case IS.andll: {
                 let dest = this.fetch();
                 let op1  = this.fetch16();
@@ -675,6 +693,18 @@ export class URCL16
                 this.regs[dest] = op1 & op2;
                 this.zf = (op1 & op2) == 0;
                 this.cf = (op1 & op2) > 2*16;
+                break;
+            }
+            case IS.int: {
+                // interrupt
+                let int_ = this.fetch();
+                switch(int_) {
+                    case 10: { // stdout::write
+                        Deno.stdout.writeSync(this.memory.slice(400, 416));
+                        //console.log(this.memory.slice(400, 416))
+                        break;
+                    } 
+                }
                 break;
             }
             case IS.andrr: {
@@ -832,7 +862,7 @@ export class URCL16
                 let op1 = this.regs[this.fetch()];
                 let op2 = this.regs[this.fetch()];
                 this.regs[dest] = op1 - op2;
-                console.log('[DBG]',dest, op1, op2)
+                //console.log('[DBG]',dest, op1, op2)
                 this.zf = op1 - op2 == 0;
                 this.cf = op1 - op2 > 2**16;
                 break;
@@ -1021,6 +1051,46 @@ export class URCL16
                 this.regs[dest] = src;
                 break;
             }
+            case IS.lodl: {
+                let dest = this.fetch();
+                let src = this.fetch16();
+                this.regs[dest] = (this.memory[src] << 8) | this.memory[src+1];
+                break;
+            }
+            case IS.lodr: {
+                let dest = this.fetch();
+                let src = this.regs[this.fetch()];
+                this.regs[dest] = (this.memory[src] << 8) | this.memory[src+1];
+                break;
+            }
+            case IS.strrml: {
+                let dest = this.fetch16();
+                let src = this.fetch16();
+                this.memory[dest+1] = src & 0xff;
+                this.memory[dest] = (src >> 8) & 0xff;
+                break;
+            }
+            case IS.strrmr: {
+                let dest = this.fetch16();
+                let src = this.regs[this.fetch()];
+                this.memory[dest+1] = src & 0xff;
+                this.memory[dest] = (src >> 8) & 0xff;
+                break;
+            }
+            case IS.strrl: {
+                let dest = this.regs[this.fetch()];
+                let src = this.fetch16();
+                this.memory[dest+1] = src & 0xff;
+                this.memory[dest] = (src >> 8) & 0xff;
+                break;
+            }
+            case IS.strrr: {
+                let dest = this.regs[this.fetch()];
+                let src = this.regs[this.fetch()];
+                this.memory[dest+1] = src & 0xff;
+                this.memory[dest] = (src >> 8) & 0xff;
+                break;
+            }
             case IS.hlt: {
                 res = true;
                 break;
@@ -1030,23 +1100,24 @@ export class URCL16
                 break;
             }
         }
-        console.log(`EIP: ${this.ip}`)
-        console.log(`INSTRUCTION: ${instruction}`)
+        //console.log(`EIP: ${this.ip}`)
+        //console.log(`INSTRUCTION: ${instruction}`)
         return res;
     }
     load(data: Uint8Array, off: int = 0) {
         for(let i = 0; i < data.length; i++) {
             this.memory[i+off] = data[i];
-            data[i] ? console.log(`Loaded symbol: ${data[i]}`) : null;
+            //data[i] ? console.log(`Loaded symbol: ${data[i]}`) : null;
         }
     }
-    start(ip: int = 0) {
-        this.ip = ip;
+    start(ip: int = this.ip) {
+        this.ip = ip >= 0 ? ip : 0;
         let i = false;
         while (!i) {
             i = this.execute();
-            console.log(`[ REGISTER DATA: [ ${this.regs} ] ]`)
+            //console.log(`[ REGISTER DATA: [ ${this.regs} ] ]`)
             if(i) break;
         }
+        //console.log(`[PROGRAM TERMINATED WITH CODE ${this.regs[0]}]`)
     }
 };

@@ -1,7 +1,7 @@
 import sys
 
 def isnum(d):
-    se = '1234567890'
+    se = '1234567890xabcdef'
     for c in d:
         if not c in se: return False
     return True
@@ -91,6 +91,7 @@ IS = {
     'pushl': 68,
     'pushr': 69,
     'pop': 70,
+    'out': 0xfe
 }
 
 class Compiler8:
@@ -132,6 +133,11 @@ class Compiler8:
                     bits = self.f()
                     if isnum(bits):
                         self.output[0] = int(bits)
+            elif ct == 'OUT':
+                addr = self.f()
+                if isnum(addr):
+                    self.push(IS['out'])
+                    self.push(int(addr))
             elif ct == 'MINREGS':
                 eqs = self.f()
                 if eqs == '>=' or eqs == '==' or eqs == '<=':
@@ -292,25 +298,38 @@ class Compiler16:
                 nd.append(dat)
         self.output = nd
         return nd
+    def include(self, filee):
+        data = open(filee, 'r')
     def c(self):
         ct = self.f()
-        print(ct)
+        #print(ct)
         while ct != None:
             if ct.startswith('//'):
                 d = self.f()
                 while d != '\n':
                     d = self.f()
-            print(ct)
+            #print(ct)
             if ct == '@org':
                 addr = self.f()
                 if isnum(addr):
-                    self.cti = int(addr)
+                    self.cti = htd(addr)
             if ct == 'BITS':
                 eqs = self.f()
                 if eqs == '>=' or eqs == '==' or eqs == '<=':
                     bits = self.f()
                     if isnum(bits):
-                        self.output[0] = int(bits)
+                        self.output[0] = htd(bits)
+            elif ct == 'OUT':
+                addr = self.f()
+                if isnum(addr):
+                    self.push(IS['out'])
+                    self.push((htd(addr) >> 8) & 0xff)
+                    self.push(htd(addr) & 0xff)
+            elif ct == 'INT':
+                inte = self.f()
+                if isnum(inte):
+                    self.push(0xfd)
+                    self.push(htd(inte))
             elif ct == 'DW':
                 word = self.f()
                 if isnum(word):
@@ -329,15 +348,15 @@ class Compiler16:
                 if eqs == '>=' or eqs == '==' or eqs == '<=':
                     regs = self.f()
                     if isnum(regs):
-                        self.output[1] = int(regs)
+                        self.output[1] = htd(regs)
             elif ct == 'MINRAM':
                 eqs = self.f()
                 if eqs == '>=' or eqs == '==' or eqs == '<=':
                     ram = self.f()
                     if isnum(regs):
-                        print((int(ram) >> 8) & 0xff)
-                        self.output[2] = ((int(ram) >> 8) & 0xff)
-                        self.output[3] = (int(ram) & 0xff)
+                        #print((int(ram) >> 8) & 0xff)
+                        self.output[2] = ((htd(ram) >> 8) & 0xff)
+                        self.output[3] = (htd(ram) & 0xff)
             elif islabel(ct):
                 self.push(f'r{ct}')
             elif ct == 'RSH':
@@ -346,26 +365,26 @@ class Compiler16:
                 if isreg(dest):
                     if isnum(src):
                         self.push(IS['rshl'])
-                        self.push(int(dest[1:])-1)
-                        self.push((int(src) >> 8) & 0xff)
-                        self.push(int(src) & 0xff)
+                        self.push(htd(dest[1:])-1)
+                        self.push((htd(src) >> 8) & 0xff)
+                        self.push(htd(src) & 0xff)
                     elif isreg(src):
                         self.push(IS['rshr'])
-                        self.push(int(dest[1:])-1)
-                        self.push(int(src[1:])-1)
+                        self.push(htd(dest[1:])-1)
+                        self.push(htd(src[1:])-1)
             elif ct == 'LSH':
                 dest = self.f()
                 src = self.f()
                 if isreg(dest):
                     if isnum(src):
                         self.push(IS['lshl'])
-                        self.push(int(dest[1:])-1)
-                        self.push((int(src) >> 8) & 0xff)
-                        self.push(int(src) & 0xff)
+                        self.push(htd(dest[1:])-1)
+                        self.push((htd(src) >> 8) & 0xff)
+                        self.push(htd(src) & 0xff)
                     elif isreg(src):
                         self.push(IS['lshr'])
-                        self.push(int(dest[1:])-1)
-                        self.push(int(src[1:])-1)
+                        self.push(htd(dest[1:])-1)
+                        self.push(htd(src[1:])-1)
             elif ct == 'CALL':
                 dest = self.f()
                 if islabel(dest):
@@ -373,7 +392,7 @@ class Compiler16:
                     self.push(dest)
                 elif isreg(dest):
                     self.push(IS['calr'])
-                    self.push(int(dest[1:])-1)
+                    self.push(htd(dest[1:])-1)
             elif ct == 'RET':
                 self.push(IS['ret'])
             elif ct == 'PUSH':
@@ -383,15 +402,15 @@ class Compiler16:
                     self.push(src)
                 elif isnum(src):
                     self.push(IS['pushl'])
-                    self.push(int(src))
+                    self.push(htd(src))
                 elif isreg(src):
                     self.push(IS['pushr'])
-                    self.push(int(src[1:])-1)
+                    self.push(htd(src[1:])-1)
             elif ct == 'POP':
                 dest = self.f()
                 if isreg(dest):
                     self.push(IS['pop'])
-                    self.push(int(dest[1:])-1)
+                    self.push(htd(dest[1:])-1)
             elif ct == 'BRA':
                 dest = self.f()
                 if islabel(dest):
@@ -399,7 +418,7 @@ class Compiler16:
                     self.push(dest)
                 elif isreg(dest):
                     self.push(IS['brar'])
-                    self.push(int(dest[1:])-1)
+                    self.push(htd(dest[1:])-1)
             elif ct == 'BRC':
                 dest = self.f()
                 if islabel(dest):
@@ -407,7 +426,7 @@ class Compiler16:
                     self.push(dest)
                 elif isreg(dest):
                     self.push(IS['brcr'])
-                    self.push(int(dest[1:])-1)
+                    self.push(htd(dest[1:])-1)
             elif ct == 'BNC':
                 dest = self.f()
                 if islabel(dest):
@@ -415,7 +434,7 @@ class Compiler16:
                     self.push(dest)
                 elif isreg(dest):
                     self.push(IS['bncr'])
-                    self.push(int(dest[1:])-1)
+                    self.push(htd(dest[1:])-1)
             elif ct == 'BRZ':
                 dest = self.f()
                 if islabel(dest):
@@ -423,7 +442,7 @@ class Compiler16:
                     self.push(dest)
                 elif isreg(dest):
                     self.push(IS['brzr'])
-                    self.push(int(dest[1:])-1)
+                    self.push(htd(dest[1:])-1)
             elif ct == 'BNZ':
                 dest = self.f()
                 if islabel(dest):
@@ -431,18 +450,18 @@ class Compiler16:
                     self.push(dest)
                 elif isreg(dest):
                     self.push(IS['bnzr'])
-                    self.push(int(dest[1:])-1)
+                    self.push(htd(dest[1:])-1)
             elif ct == 'IMM':
                 dest = self.f()
                 src = self.f()
                 if isreg(dest) and isnum(src):
                     self.push(IS['imm'])
-                    self.push(int(dest[1:])-1)
-                    self.push((int(src) >> 8) & 0xff)
-                    self.push(int(src) & 0xff)
+                    self.push(htd(dest[1:])-1)
+                    self.push((htd(src) >> 8) & 0xff)
+                    self.push(htd(src) & 0xff)
                 elif isreg(dest) and islabel(src):
                     self.push(IS['imm'])
-                    self.push(int(dest[1:])-1)
+                    self.push(htd(dest[1:])-1)
                     self.push(src)
                     
                     
@@ -451,8 +470,8 @@ class Compiler16:
                 dest = self.f()
                 if isreg(src) and isreg(dest):
                     self.push(IS['mov'])
-                    self.push(int(dest[1:])-1)
-                    self.push(int(src[1:])-1)
+                    self.push(htd(dest[1:])-1)
+                    self.push(htd(src[1:])-1)
                     
                     
             elif ct == 'ADD':
@@ -462,22 +481,22 @@ class Compiler16:
                 if isreg(dest):
                     if isnum(op1) and isnum(op2):
                         self.push(IS['addll'])
-                        self.push(int(dest[1:])-1)
-                        self.push((int(op1) >> 8) & 0xff)
-                        self.push(int(op1) & 0xff)
-                        self.push((int(op2) >> 8) & 0xff)
-                        self.push(int(op2) & 0xff)
+                        self.push(htd(dest[1:])-1)
+                        self.push((htd(op1) >> 8) & 0xff)
+                        self.push(htd(op1) & 0xff)
+                        self.push((htd(op2) >> 8) & 0xff)
+                        self.push(htd(op2) & 0xff)
                     elif isreg(op1) and isnum(op2):
                         self.push(IS['addrl'])
-                        self.push(int(dest[1:])-1)
-                        self.push(int(op1[1:])-1)
-                        self.push((int(op2) >> 8) & 0xff)
-                        self.push(int(op2) & 0xff)
+                        self.push(htd(dest[1:])-1)
+                        self.push(htd(op1[1:])-1)
+                        self.push((htd(op2) >> 8) & 0xff)
+                        self.push(htd(op2) & 0xff)
                     elif isreg(op1) and isreg(op2):
                         self.push(IS['addrr'])
-                        self.push(int(dest[1:])-1)
-                        self.push(int(op1[1:])-1)
-                        self.push(int(op2[1:])-1)
+                        self.push(htd(dest[1:])-1)
+                        self.push(htd(op1[1:])-1)
+                        self.push(htd(op2[1:])-1)
             elif ct == 'AND':
                 dest = self.f()
                 op1 = self.f()
@@ -485,22 +504,22 @@ class Compiler16:
                 if isreg(dest):
                     if isnum(op1) and isnum(op2):
                         self.push(IS['andll'])
-                        self.push(int(dest[1:])-1)
-                        self.push((int(op1) >> 8) & 0xff)
-                        self.push(int(op1) & 0xff)
-                        self.push((int(op2) >> 8) & 0xff)
-                        self.push(int(op2) & 0xff)
+                        self.push(htd(dest[1:])-1)
+                        self.push((htd(op1) >> 8) & 0xff)
+                        self.push(htd(op1) & 0xff)
+                        self.push((htd(op2) >> 8) & 0xff)
+                        self.push(htd(op2) & 0xff)
                     elif isreg(op1) and isnum(op2):
                         self.push(IS['andrl'])
-                        self.push(int(dest[1:])-1)
-                        self.push(int(op1[1:])-1)
-                        self.push((int(op2) >> 8) & 0xff)
-                        self.push(int(op2) & 0xff)
+                        self.push(htd(dest[1:])-1)
+                        self.push(htd(op1[1:])-1)
+                        self.push((htd(op2) >> 8) & 0xff)
+                        self.push(htd(op2) & 0xff)
                     elif isreg(op1) and isreg(op2):
                         self.push(IS['andrr'])
-                        self.push(int(dest[1:])-1)
-                        self.push(int(op1[1:])-1)
-                        self.push(int(op2[1:])-1)
+                        self.push(htd(dest[1:])-1)
+                        self.push(htd(op1[1:])-1)
+                        self.push(htd(op2[1:])-1)
             elif ct == 'OR':
                 dest = self.f()
                 op1 = self.f()
@@ -508,22 +527,22 @@ class Compiler16:
                 if isreg(dest):
                     if isnum(op1) and isnum(op2):
                         self.push(IS['orll'])
-                        self.push(int(dest[1:])-1)
-                        self.push((int(op1) >> 8) & 0xff)
-                        self.push(int(op1) & 0xff)
-                        self.push((int(op2) >> 8) & 0xff)
-                        self.push(int(op2) & 0xff)
+                        self.push(htd(dest[1:])-1)
+                        self.push((htd(op1) >> 8) & 0xff)
+                        self.push(htd(op1) & 0xff)
+                        self.push((htd(op2) >> 8) & 0xff)
+                        self.push(htd(op2) & 0xff)
                     elif isreg(op1) and isnum(op2):
                         self.push(IS['orrl'])
-                        self.push(int(dest[1:])-1)
-                        self.push(int(op1[1:])-1)
-                        self.push((int(op2) >> 8) & 0xff)
-                        self.push(int(op2) & 0xff)
+                        self.push(htd(dest[1:])-1)
+                        self.push(htd(op1[1:])-1)
+                        self.push((htd(op2) >> 8) & 0xff)
+                        self.push(htd(op2) & 0xff)
                     elif isreg(op1) and isreg(op2):
                         self.push(IS['orrr'])
-                        self.push(int(dest[1:])-1)
-                        self.push(int(op1[1:])-1)
-                        self.push(int(op2[1:])-1)
+                        self.push(htd(dest[1:])-1)
+                        self.push(htd(op1[1:])-1)
+                        self.push(htd(op2[1:])-1)
             elif ct == 'XOR':
                 dest = self.f()
                 op1 = self.f()
@@ -531,52 +550,90 @@ class Compiler16:
                 if isreg(dest):
                     if isnum(op1) and isnum(op2):
                         self.push(IS['xorll'])
-                        self.push(int(dest[1:])-1)
-                        self.push((int(op1) >> 8) & 0xff)
-                        self.push(int(op1) & 0xff)
-                        self.push((int(op2) >> 8) & 0xff)
-                        self.push(int(op2) & 0xff)
+                        self.push(htd(dest[1:])-1)
+                        self.push((htd(op1) >> 8) & 0xff)
+                        self.push(htd(op1) & 0xff)
+                        self.push((htd(op2) >> 8) & 0xff)
+                        self.push(htd(op2) & 0xff)
                     elif isreg(op1) and isnum(op2):
                         self.push(IS['xorrl'])
-                        self.push(int(dest[1:])-1)
-                        self.push(int(op1[1:])-1)
-                        self.push((int(op2) >> 8) & 0xff)
-                        self.push(int(op2) & 0xff)
+                        self.push(htd(dest[1:])-1)
+                        self.push(htd(op1[1:])-1)
+                        self.push((htd(op2) >> 8) & 0xff)
+                        self.push(htd(op2) & 0xff)
                     elif isreg(op1) and isreg(op2):
                         self.push(IS['xorrr'])
-                        self.push(int(dest[1:])-1)
-                        self.push(int(op1[1:])-1)
-                        self.push(int(op2[1:])-1)
+                        self.push(htd(dest[1:])-1)
+                        self.push(htd(op1[1:])-1)
+                        self.push(htd(op2[1:])-1)
+            elif ct == 'LOD':
+                dest = self.f()
+                src = self.f()
+                if isreg(dest):
+                    if isnum(src):
+                        self.push(IS['lodl'])
+                        self.push(htd(dest[1:])-1)
+                        self.push((htd(src) >> 8) & 0xff)
+                        self.push(htd(src) & 0xff)
+                    elif isreg(src):
+                        self.push(IS['lodr'])
+                        self.push(htd(dest[1:])-1)
+                        self.push(htd(src[1:])-1)
+            elif ct == 'STORE':
+                dest = self.f()
+                src = self.f()
+                if isnum(dest):
+                    if isnum(src):
+                        self.push(IS['strrml'])
+                        self.push((htd(dest) >> 8) & 0xff)
+                        self.push(htd(dest) &0xff)
+                        self.push((htd(src) >> 8) & 0xff)
+                        self.push(htd(src) & 0xff)
+                    elif isreg(src):
+                        self.push(IS['strrmr'])
+                        self.push((htd(dest) >> 8) & 0xff)
+                        self.push(htd(dest) &0xff)
+                        self.push(htd(src[1:])-1)
+                elif isreg(dest):
+                    if isnum(src):
+                        self.push(IS['strrl'])
+                        self.push(htd(dest[1:])-1)
+                        self.push((htd(src) >> 8) & 0xff)
+                        self.push(htd(src) & 0xff)
+                    elif isreg(src):
+                        self.push(IS['strrr'])
+                        self.push(htd(dest[1:])-1)
+                        self.push(htd(src[1:])-1)
             elif ct == 'SUB':
                 dest = self.f()
                 op1 = self.f()
                 op2 = self.f()
-                print(int(dest[1:])-1, op1, op2)
+                #print(int(dest[1:])-1, op1, op2)
                 if isreg(dest):
                     if isnum(op1) and isnum(op2):
                         self.push(IS['subll'])
-                        self.push(int(dest[1:])-1)
-                        self.push((int(op1) >> 8) & 0xff)
-                        self.push(int(op1) & 0xff)
-                        self.push((int(op2) >> 8) & 0xff)
-                        self.push(int(op2) & 0xff)
+                        self.push(htd(dest[1:])-1)
+                        self.push((htd(op1) >> 8) & 0xff)
+                        self.push(htd(op1) & 0xff)
+                        self.push((htd(op2) >> 8) & 0xff)
+                        self.push(htd(op2) & 0xff)
                     elif isreg(op1) and isnum(op2):
                         self.push(IS['subrl'])
-                        self.push(int(dest[1:])-1)
-                        self.push(int(op1[1:])-1)
-                        self.push((int(op2) >> 8) & 0xff)
-                        self.push(int(op2) & 0xff)
+                        self.push(htd(dest[1:])-1)
+                        self.push(htd(op1[1:])-1)
+                        self.push((htd(op2) >> 8) & 0xff)
+                        self.push(htd(op2) & 0xff)
                     elif isnum(op1) and isreg(op2):
                         self.push(IS['sublr'])
-                        self.push(int(dest[1:])-1)
-                        self.push((int(op1) >> 8) & 0xff)
-                        self.push(int(op1) & 0xff)
-                        self.push(int(op2[1:])-1)
+                        self.push(htd(dest[1:])-1)
+                        self.push((htd(op1) >> 8) & 0xff)
+                        self.push(htd(op1) & 0xff)
+                        self.push(htd(op2[1:])-1)
                     elif isreg(op1) and isreg(op2):
                         self.push(IS['subrr'])
-                        self.push(int(dest[1:])-1)
-                        self.push(int(op1[1:])-1)
-                        self.push(int(op2[1:])-1)
+                        self.push(htd(dest[1:])-1)
+                        self.push(htd(op1[1:])-1)
+                        self.push(htd(op2[1:])-1)
             elif ct == 'HLT':
                 self.push(0xff)
             try:
@@ -588,12 +645,12 @@ class Compiler16:
 if sys.argv[3] == '8':
     co = Compiler8(open(sys.argv[1], 'r').read())
     d, labs = co.c()
-    print(d, labs)
+    #print(d, labs)
     open(sys.argv[2], 'wb').write(bytearray(d))
 elif sys.argv[3] == '16':
     co = Compiler16(open(sys.argv[1], 'r').read())
     d, labs = co.c()
-    print(labs)
+    #print(labs)
     open(sys.argv[2], 'wb').write(bytearray(d))
 
 

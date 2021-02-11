@@ -1,0 +1,3 @@
+OFFSETTABLE:
+.printf: @org 300
+.dataSeg: @org 400

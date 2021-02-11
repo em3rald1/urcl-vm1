@@ -7,7 +7,7 @@ vm = new URCL8(data[0], data[1], data[2]);
 } catch(e) {
     try {
         vm = new URCL16(data[0], data[1], (data[2] << 8) | data[3]);  
-        console.log((data[2] << 8) | data[3])      
+        //console.log((data[2] << 8) | data[3])      
     } catch(e) {
         vm = new URCL16(16, 0, 1);
     }
