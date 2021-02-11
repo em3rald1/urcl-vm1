@@ -1,0 +1,13 @@
+BITS >= 16
+MINREGS >= 11
+MINRAM <= 1024
+
+// data
+
+CALL .fl
+HLT
+
+@org 50
+.fl
+DW .fl
+RET
