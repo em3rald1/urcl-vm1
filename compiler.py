@@ -267,7 +267,7 @@ def _format_labels_(data):
     return labels
 
 def generateOffsetTable(labels = {}):
-    data = ""
+    data = "@place 0\n"
     for label in labels:
         data += f"{label}: @org {labels[label]}\n"
     return data

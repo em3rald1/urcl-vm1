@@ -700,7 +700,7 @@ export class URCL16
                 let int_ = this.fetch();
                 switch(int_) {
                     case 10: { // stdout::write
-                        Deno.stdout.writeSync(this.memory.slice(400, 416));
+                        console.log(new TextDecoder().decode(this.memory.slice(400, 416)));
                         //console.log(this.memory.slice(400, 416))
                         break;
                     } 
