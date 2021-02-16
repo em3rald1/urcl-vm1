@@ -1,0 +1,13 @@
+@org 850
+// multiply
+.mul
+// data to multiply: R4, multiplier: R3
+IMM R2 0
+.loop
+ADD R1 R4 R1
+ADD R2 R2 1
+SUB R5 R2 R3
+BCZ .end
+BNZ .loop
+.end
+RET

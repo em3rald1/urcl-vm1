@@ -1,12 +1,22 @@
-BITS >= 16
-MINREGS >= 11
-MINRAM <= 10000
-BRA .KernelEntry
-.KernelEntry
-STORE 400 97
-STORE 401 97
-STORE 402 97
-STORE 403 97
-STORE 404 97
-INT 10
+BITS == 32
+MINREGS == 4
+MINRAM == 40000
+IMM 5000 R4
+CAL .printf
+JMP .noreturn
 HLT
+
+
+@org 504
+.printf
+SUB R4 R4 4
+STORE 28672 dword R4
+RET
+
+@org 5000
+.string
+DB "hello, world!"
+
+@org 8000
+.noreturn
+JMP .noreturn

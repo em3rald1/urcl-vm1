@@ -1,0 +1,16 @@
+// MINIMUM RAM = 3kb
+
+@org 700
+.puts
+// pointer to string = R4
+ADD R4 R4 3
+STORE 400 R4
+INT 10
+RET
+
+@org 750
+.got
+DW .puts
+DW 0
+DW 0
+DW 0

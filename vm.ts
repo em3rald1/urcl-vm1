@@ -4,17 +4,7 @@
 */
 
 type int = number;
-
-import { readLines } from "https://deno.land/std@0.76.0/io/bufio.ts";
-
-async function promptString() {
-    //console.log(question);
-
-    for await (const line of readLines(Deno.stdin)) {
-        return line;
-    }
-}
-
+let fs = require('fs');
 const IS = {
     'addrr': 1, // a + b
     'addrl': 2, //  a + 5
@@ -674,7 +664,7 @@ export class URCL16
         switch(instruction) {
             case IS.out: {
                 let src = this.fetch16();
-                Deno.stdout.write(new Uint8Array([this.memory[src]]));
+                //Deno.stdout.write(new Uint8Array([this.memory[src]]));
                 break;
             }
             case IS.andll: {
@@ -700,7 +690,10 @@ export class URCL16
                 let int_ = this.fetch();
                 switch(int_) {
                     case 10: { // stdout::write
-                        console.log(new TextDecoder().decode(this.memory.slice(400, 416)));
+                        let addr = (this.memory[400] << 8) | this.memory[401];
+                        //console.log(addr);
+                        //Deno.writeAll(Deno.stdout, this.memory.slice(addr, addr+64));
+                        //console.log(new TextDecoder().decode(this.memory.slice(addr,addr+16)));
                         //console.log(this.memory.slice(400, 416))
                         break;
                     } 
@@ -1096,7 +1089,7 @@ export class URCL16
                 break;
             }
             default: {
-                res = true;
+                //res = true;
                 break;
             }
         }
@@ -1121,3 +1114,450 @@ export class URCL16
         //console.log(`[PROGRAM TERMINATED WITH CODE ${this.regs[0]}]`)
     }
 };
+
+const I32 = {
+    cmpll: 0xf0,
+    cmprl: 0xf1,
+    cmplr: 0xf2,
+    cmprr: 0xf3,
+    jeql: 0xe0,
+    jeqr: 0xe1,
+    jnel: 0xe2,
+    jner: 0xe3,
+    jgl:  0xe4,
+    jgr: 0xe5,
+    jll: 0xe6,
+    jlr: 0xe7,
+    irql: 0xe8,
+    irqr: 0xe9,
+};
+
+const GPU32URCL : int = 0x00007000;
+const GPU32URCLSIZE: int = 0xff;
+
+export class URCL32 {
+    memory: Uint8Array = new Uint8Array(0);
+    regs: Uint32Array = new Uint32Array(0);
+    ip : int = 0;
+    sp : int = 0;
+    callStack: int[] = [];
+    zf : boolean = true;
+    cf: boolean = false;
+    cpf : int = -1;
+    irq: int = -1;
+    constructor(bits: int, minregs: int, ram: int) {
+        if(bits != 32) return;
+        this.regs = new Uint32Array(minregs);
+        this.memory = new Uint8Array(ram);
+        this.ip = 0;
+        this.sp = ram-0xff;
+        this.callStack = [];
+        this.zf = true;
+        this.cf = false;
+        this.cpf = -1;
+        this.irq = ram;
+        this.memory[0x7000] = 0xff;
+        this.memory[0x7001] = 0xff;
+        this.memory[0x7002] = 0xff;
+        this.memory[0x7003] = 0xff;
+    }
+    push(d: int) : void {
+        this.memory[this.sp] = d;
+        this.sp--;
+    }
+    pop() : int {
+        this.sp++;
+        return this.memory[this.sp];
+    }
+    fetch(): int {
+        return this.memory[this.ip++];
+    }
+    fetch16() : int {
+        let d1 = this.fetch();
+        let d2 = this.fetch();
+        return (d1 << 8) | d2;
+    }
+    fetch32() : int {
+        let d1 = this.fetch16();
+        let d2 = this.fetch16();
+        return (d1 << 16) | d2;
+    }
+    start() : void {
+        let i : boolean = false;
+        while(!i) {
+            i = this.execute();
+            //console.log('REGISTERS: ', this.regs);
+            //console.log('EIP: ', this.ip)
+            //console.log('CALL STACK: ', this.callStack)
+        }
+    }
+    load(d: Uint8Array, of_:int) {
+        for(let i = 0; i<d.length; i++) {
+            this.memory[i+of_] = d[i];
+        }
+    }
+    execute() : boolean {
+        let res = false;
+        let instruction = this.fetch();
+        //console.log(this.memory[(this.memory[GPU32URCL] << 24) | (this.memory[GPU32URCL+1] << 16) | (this.memory[GPU32URCL+2] << 8) | this.memory[GPU32URCL+3]+1]);
+        let globalPointer = 0x7000;
+        let charPointer = (this.memory[globalPointer] << 24) | (this.memory[globalPointer+1]<<16)|(this.memory[globalPointer+2]<<8)|this.memory[globalPointer+3];
+      //  console.log(charPointer)
+        let data : Uint8Array = this.memory.slice(charPointer, charPointer+255);
+       /// console.log(data);
+        process.stdout.write(new TextDecoder().decode(data));
+        this.memory[globalPointer] = 0xff;
+        this.memory[globalPointer+1] = 0xff;
+        this.memory[globalPointer+2] = 0xff;
+        this.memory[globalPointer+3] = 0xff;
+        //this.memory = this.memory.fill(0, GPU32URCL, GPU32URCLSIZE);
+        //for(let i = GPU32URCL-1; i < GPU32URCL+GPU32URCLSIZE; i++) {
+        //    this.memory[i] = 0;
+        //}
+        switch(instruction) {
+            case IS.addll: {
+                let dest = this.fetch();
+                let d1 = this.fetch32();
+                let d2 = this.fetch32();
+                this.regs[dest] = d1+d2;
+                this.zf = d1+d2 == 0;
+                break;
+            }
+            case IS.addrl: {
+                let dest = this.fetch();
+                let d1 = this.regs[this.fetch()];
+                let d2 = this.fetch32();
+                this.regs[dest] = d1+d2;
+                this.zf = d1+d2 == 0;
+                break;
+            }
+            case IS.addrr: {
+                let dest = this.fetch();
+                let d1 = this.regs[this.fetch()];
+                let d2 = this.regs[this.fetch()];
+                this.regs[dest] = d1+d2;
+                this.zf = d1+d2 == 0;
+                break;
+            }
+            case IS.subll: {
+                let dest = this.fetch();
+                let d1 = this.fetch32();
+                let d2 = this.fetch32();
+                this.regs[dest] = d1-d2;
+                this.zf = d1-d2 == 0;
+                break;
+            }
+            case IS.subrl: {
+                let dest = this.fetch();
+                let d1 = this.regs[this.fetch()];
+                let d2 = this.fetch32();
+                this.regs[dest] = d1-d2;
+                this.zf = d1-d2 == 0;
+                break;
+            }
+            case IS.sublr: {
+                let dest = this.fetch();
+                let d1 = this.fetch32();
+                let d2 = this.regs[this.fetch()];
+                this.regs[dest] = d1-d2;
+                this.zf = d1-d2 == 0;
+                break;
+            }
+            case IS.subrr:{ 
+                let dest = this.fetch();
+                let d1 = this.regs[this.fetch()];
+                let d2 = this.regs[this.fetch()];
+                this.regs[dest] = d1-d2;
+                this.zf = d1-d2 == 0;
+                break;
+            }
+            case I32.cmpll: {
+                let d1 = this.fetch32();
+                let d2 = this.fetch32();
+                this.cpf = d1 == d2 ? 0 : d1 != d2 ? 1 : d1 > d2 ? 2 : d1 < d2 ? 3 : (() => {throw new TypeError('Something went wrong!')})();
+                break;
+            }
+            case I32.cmprl: {
+                let d1 = this.regs[this.fetch()];
+                let d2 = this.fetch32();
+                this.cpf = d1 == d2 ? 0 : d1 != d2 ? 1 : d1 > d2 ? 2 : d1 < d2 ? 3 : (() => {throw new TypeError('Something went wrong!')})();
+                break;
+            }
+            case I32.cmplr: {
+                let d1 = this.fetch32();
+                let d2 = this.regs[this.fetch()];
+                this.cpf = d1 == d2 ? 0 : d1 != d2 ? 1 : d1 > d2 ? 2 : d1 < d2 ? 3 : (() => {throw new TypeError('Something went wrong!')})();
+                break;
+            }
+            case I32.cmprr: {
+                let d1 = this.regs[this.fetch()];
+                let d2 = this.regs[this.fetch()];
+                this.cpf = d1 == d2 ? 0 : d1 != d2 ? 1 : d1 > d2 ? 2 : d1 < d2 ? 3 : (() => {throw new TypeError('Something went wrong!')})();
+                break;
+            }
+            case I32.jeql: {
+                let dest = this.fetch32();
+                if(this.cpf == 0) {this.callStack.push(this.ip);this.ip = dest};
+                break;
+            }
+            case I32.jeqr: {
+                let dest = this.regs[this.fetch()];
+                if(this.cpf == 0) {
+                    this.callStack.push(this.ip);this.ip = dest};
+                break;
+            }
+            case I32.jnel: {
+                let dest = this.fetch32();
+                if(this.cpf == 1){this.callStack.push(this.ip); this.ip = dest};
+                break;
+            }
+            case I32.jner: {
+                let dest = this.regs[this.fetch()];
+                if(this.cpf == 1){ this.callStack.push(this.ip);this.ip = dest};
+                break;
+            }
+            case I32.jgl: {
+                let dest = this.fetch32();
+                if(this.cpf == 2) {this.callStack.push(this.ip);this.ip = dest};
+                break;
+            }
+            case I32.jgr: {
+                let dest = this.regs[this.fetch()];
+                if(this.cpf == 2) {this.callStack.push(this.ip);this.ip = dest};
+                break;
+            }
+            case I32.jll: {
+                let dest = this.fetch32();
+                if(this.cpf == 3) {this.callStack.push(this.ip);this.ip = dest};
+                break;
+            }
+            case I32.jlr: {
+                let dest = this.regs[this.fetch()];
+                if(this.cpf == 3) {this.callStack.push(this.ip);this.ip = dest};
+                break;
+            }
+            case IS.hlt: {
+                res = true;
+                break;
+            }
+            case IS.call: {
+                let dest = this.fetch32();
+                this.callStack.push(this.ip);
+                this.ip = dest;
+                break;
+            }
+            case IS.calr: {
+                let dest = this.regs[this.fetch()];
+                this.callStack.push(this.ip);
+                this.ip = dest;
+                break;
+            }
+            case IS.ret: {
+                this.ip = (this.callStack.pop() || 0);
+                break;
+            }
+            case IS.imm: {
+                let dest = this.fetch();
+                let src = this.fetch32();
+                console.log(dest, src);
+                this.regs[dest] = src;
+                break;
+            }
+            case IS.mov:{ 
+                let dest =this.fetch();
+                let src = this.fetch();
+                this.regs[dest] = this.regs[src];
+                break;
+            }
+            case IS.lodl: {
+                let dest = this.fetch();
+                let src = this.fetch32();
+                let size = this.fetch();
+                switch(size) {
+                    case 1: {
+                        // load byte
+                        this.regs[dest] = this.memory[src];
+                        break;
+                    }
+                    case 2: {
+                        // load word
+                        this.regs[dest] = (this.memory[src] << 8) | this.memory[src+1];
+                        break;
+                    }
+                    case 4: {
+                        // load dword
+                        this.regs[dest] = (this.memory[src] << 24) | (this.memory[src+1] << 16) | (this.memory[src+2] << 8) | this.memory[src+3];
+                        break;
+                    }
+                }
+                break;
+            }
+            case IS.lodr:{
+                let dest = this.fetch();
+                let src = this.regs[this.fetch()];
+                let size = this.fetch();
+                switch(size) {
+                    case 1: {
+                        // load byte
+                        this.regs[dest] = this.memory[src];
+                        break;
+                    }
+                    case 2: {
+                        // load word
+                        this.regs[dest] = (this.memory[src] << 8) | this.memory[src+1];
+                        break;
+                    }
+                    case 4: {
+                        // load dword
+                        this.regs[dest] = (this.memory[src] << 24) | (this.memory[src+1] << 16) | (this.memory[src+2] << 8) | this.memory[src+3];
+                        break;
+                    }
+                }
+                break;
+            }
+            case IS.strrml: {
+                let dest = this.fetch32();
+                let src = this.fetch32();
+                let bs = this.fetch();
+                if(bs == 1) {
+                    // store byte
+                    this.memory[dest] = src & 0xff;
+                } else if(bs == 2) {
+                    // store word
+                    this.memory[dest] = (src >> 8) & 0xff;
+                    this.memory[dest+1] = (src & 0xff);
+                }
+                else if(bs == 4) {
+                    // store dword
+                    this.memory[dest] = (src >> 24) & 0xff;
+                    this.memory[dest+1] = (src >> 16) & 0xff;
+                    this.memory[dest+2] = (src >> 8) & 0xff;
+                    this.memory[dest+3] = (src) & 0xff;
+                }
+                break;
+            }
+            case IS.strrmr: {
+                let dest = this.fetch32();
+                let src = this.regs[this.fetch()];
+                let bs = this.fetch();
+                if(bs == 1) {
+                    // store byte
+                    this.memory[dest] = src & 0xff;
+                } else if(bs == 2) {
+                    // store word
+                    this.memory[dest] = (src >> 8) & 0xff;
+                    this.memory[dest+1] = (src & 0xff);
+                }
+                else if(bs == 4) {
+                    // store dword
+                    this.memory[dest] = (src >> 24) & 0xff;
+                    this.memory[dest+1] = (src >> 16) & 0xff;
+                    this.memory[dest+2] = (src >> 8) & 0xff;
+                    this.memory[dest+3] = (src) & 0xff;
+                }
+                break;
+            }
+            case IS.strrl: {
+                let dest = this.regs[this.fetch()];
+                let src = this.fetch32();
+                let bs = this.fetch();
+                if(bs == 1) {
+                    // store byte
+                    this.memory[dest] = src & 0xff;
+                } else if(bs == 2) {
+                    // store word
+                    this.memory[dest] = (src >> 8) & 0xff;
+                    this.memory[dest+1] = (src & 0xff);
+                }
+                else if(bs == 4) {
+                    // store dword
+                    this.memory[dest] = (src >> 24) & 0xff;
+                    this.memory[dest+1] = (src >> 16) & 0xff;
+                    this.memory[dest+2] = (src >> 8) & 0xff;
+                    this.memory[dest+3] = (src) & 0xff;
+                }
+                break;
+            }
+            case IS.strrr: {
+                let dest = this.regs[this.fetch()];
+                let src = this.regs[this.fetch()];
+                let bs = this.fetch();
+                if(bs == 1) {
+                    // store byte
+                    this.memory[dest] = src & 0xff;
+                } else if(bs == 2) {
+                    // store word
+                    this.memory[dest] = (src >> 8) & 0xff;
+                    this.memory[dest+1] = (src & 0xff);
+                }
+                else if(bs == 4) {
+                    // store dword
+                    this.memory[dest] = (src >> 24) & 0xff;
+                    this.memory[dest+1] = (src >> 16) & 0xff;
+                    this.memory[dest+2] = (src >> 8) & 0xff;
+                    this.memory[dest+3] = (src) & 0xff;
+                }
+                break;
+            }
+            case IS.bral: {
+                let addr = this.fetch32();
+                this.ip = addr;
+                break;
+            }
+            case IS.brar: {
+                let addr = this.regs[this.fetch32()];
+                this.ip = addr;
+                break;
+            }
+            case I32.irql: {
+                let i = this.fetch32();
+                this.irq = i;
+                break;
+            }
+            case I32.irqr: {
+                let i = this.regs[this.fetch()];
+                this.irq = i;
+                break;
+            }
+            case IS.int:{
+                let in__ = this.fetch();
+                this.push((this.ip >> 24) & 0xff);
+                this.push((this.ip >> 16) & 0xff);
+                this.push((this.ip >> 8) & 0xff);
+                this.push(this.ip & 0xff);
+                this.push(in__);
+                this.ip = this.irq;
+                break;
+            }
+            case IS.pop: {
+                let dest = this.fetch();
+                this.regs[dest] = this.pop();
+                break;
+            }
+            case IS.pushr: {
+                let src = this.fetch();
+                this.push(this.regs[src]);
+                break;
+            }
+            case IS.pushl: {
+                let src = this.fetch();
+                this.push(src);
+                break;
+            }
+        }
+        return res;
+    }
+};
+
+function to32bit(data:int) {
+    let d1 = data >> 24;
+    let d2 = data>>16;
+    let d3 = data>>8;
+    let d4 = data;
+    return [d1 & 0xff, d2 & 0xff, d3 & 0xff, d4 & 0xff];
+}
+
+let fdata = fs.readFileSync(process.argv[1])
+let vm = new URCL32(fdata[0], fdata[1], (fdata[2] << 24) | (fdata[3] << 16) | (fdata[4] << 8) | fdata[5])
+vm.load(fdata.slice(6), 0)
+vm.start()
